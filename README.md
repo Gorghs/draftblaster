@@ -5,14 +5,21 @@
 
 ---
 
+## ⚡ Quick Start (Load directly into Chrome / Opera / Brave)
+
+If `dist/` is already built:
+1. Open your browser and go to `chrome://extensions` (or `opera://extensions` / `brave://extensions`).
+2. Turn on the **Developer mode** toggle (top-right corner).
+3. Click **Load unpacked** (top-left) and select the `dist/` folder.
+4. Open [Gmail Drafts](https://mail.google.com/#drafts), click the **DraftBlaster** toolbar icon, open **Settings (⚙️)**, and paste your **Gemini API Key**. Done!
+
+---
+
 ## 📑 Table of Contents
 - [Why DraftBlaster?](#-why-draftblaster)
 - [🔒 100% Client-Side Architecture (No Backend Needed)](#-100-client-side-architecture-no-backend-needed)
 - [🛡️ Draft Integrity Guarantee (Drafts Never Change)](#️-draft-integrity-guarantee-drafts-never-change)
-- [📦 Installation & Setup Guide](#-installation--setup-guide)
-  - [Step 1: Clone and Configure Environment](#step-1-clone-and-configure-environment)
-  - [Step 2: Build the Static Extension](#step-2-build-the-static-extension)
-  - [Step 3: Load into Your Browser](#step-3-load-into-your-browser)
+- [📦 Building from Source (Developers)](#-building-from-source-developers)
 - [🚦 Complete Step-by-Step Usage Guide](#-complete-step-by-step-usage-guide)
 - [⚙️ Settings & Configuration](#️-settings--configuration)
 - [🤖 How Gemini AI Navigation Recovery Works](#-how-gemini-ai-navigation-recovery-works)
@@ -31,7 +38,7 @@ When managing bulk outreach, newsletters, or follow-ups, users often prepare doz
 
 ## 🔒 100% Client-Side Architecture (No Backend Needed)
 
-DraftBlaster is designed to be completely self-contained within your browser. There is **no backend server**, **no middleware**, and **no external database** required.
+DraftBlaster is completely self-contained within your browser. There is **no backend server**, **no middleware**, and **no external database** required.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -68,62 +75,32 @@ DraftBlaster follows a strict **zero-modification principle**:
 
 ---
 
-## 📦 Installation & Setup Guide
+## 📦 Building from Source (Developers)
 
-### Step 1: Clone and Configure Environment
+If you clone the repository to a new machine or modify the TypeScript/React code:
 
-1. Clone your repository:
-   ```bash
-   git clone https://github.com/Gorghs/draftblaster.git
-   cd draftblaster
-   ```
-
-2. Create your local environment configuration:
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Open `.env` in any text editor and add your Gemini API Key:
-   ```env
-   VITE_GEMINI_API_KEY=your_gemini_api_key_here
-   VITE_GEMINI_MODEL=gemini-2.5-flash
-   ```
-   *(Note: `.env` is listed in `.gitignore` so your secret key is never committed or pushed to GitHub.)*
-
----
-
-### Step 2: Build the Static Extension
-
-Install the project dependencies and compile the TypeScript bundle:
-
+### 1. Install Dependencies & Build
 ```bash
+# 1. Install build tools and dependencies (Vite, React, TypeScript)
 npm install
+
+# 2. Compile static extension into dist/
 npm run build
 ```
 
-This generates a self-contained, production-ready static directory named `dist/`.
+> **Why `npm install`?**  
+> GitHub repositories do not store third-party packages (`node_modules`). `npm install` is only needed when building from source code to download Vite and React for compilation.
 
-> **Development Mode:** If you want live-reloading while modifying source code, run `npm run dev`. For everyday use, `npm run build` is all you need.
-
----
-
-### Step 3: Load into Your Browser
-
-#### 🌐 For Google Chrome / Opera / Brave / Microsoft Edge (Chromium):
-1. Open your browser and go to the Extensions page:
-   - **Google Chrome**: `chrome://extensions`
-   - **Opera**: `opera://extensions`
-   - **Brave**: `brave://extensions`
-   - **Microsoft Edge**: `edge://extensions`
-2. Turn on the **Developer mode** toggle switch (usually found in the top-right corner).
-3. Click the **Load unpacked** button (top-left).
-4. Browse to and select the `dist/` folder inside your `draftblaster` directory.
-5. The **DraftBlaster** extension icon will now appear in your browser's toolbar. Pin it for easy access!
-
-#### 🦊 For Mozilla Firefox:
-1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`.
-2. Click **Load Temporary Add-on...**.
-3. Select the `manifest.json` file inside the `dist/` folder.
+### 2. (Optional) Configure Default Environment Variables
+You can optionally bake a default API key into the build using `.env` (or just paste it into the UI after loading):
+```bash
+cp .env.example .env
+```
+Edit `.env`:
+```env
+VITE_GEMINI_API_KEY=your_gemini_api_key_here
+VITE_GEMINI_MODEL=gemini-2.5-flash
+```
 
 ---
 
@@ -168,7 +145,7 @@ Click the **Gear Icon (⚙️)** in the DraftBlaster popup to customize options:
 
 | Setting | Default | Description |
 |---|---|---|
-| **Gemini API Key** | From `.env` | Your Google Gemini API key used for UI navigation recovery. Can also be entered or changed directly in the popup UI. |
+| **Gemini API Key** | Empty / Stored locally | Your Google Gemini API key used for UI navigation recovery. Paste it directly in this field and click Save. |
 | **Gemini Model** | `gemini-2.5-flash` | The Gemini model name used for vision/navigation assistance. |
 | **Run Limit** | `500` | Maximum number of drafts to process in a single automated batch. |
 | **Min Delay (ms)** | `1500` | Minimum wait time between sends (in milliseconds) to prevent rate limiting. |
@@ -194,12 +171,6 @@ DraftBlaster includes comprehensive unit tests and safety assertion suites using
 ```bash
 npm test
 ```
-
-### What the tests verify:
-- **Safety Boundaries**: Confirms that AI responses can never bypass confirmation or trigger unauthorized send actions.
-- **Run Limits & Stop Controls**: Verifies immediate halts when the user clicks STOP.
-- **Pacing & Delays**: Validates randomization of human-delay algorithms.
-- **State Machine**: Ensures transitions from IDLE → SCANNING → READY → SENDING → COMPLETED happen predictably.
 
 ---
 
