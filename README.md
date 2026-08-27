@@ -1,181 +1,191 @@
-# DraftBlaster 🚀
+# 🚀 DraftBlaster
 
-> **A 100% Client-Side, Zero-Backend Personal Browser Extension (Manifest V3) for Automating Gmail Draft Sending**  
-> Supported Browsers: **Google Chrome**, **Opera**, **Brave**, **Microsoft Edge**, and **Mozilla Firefox**.
-
----
-
-## ⚡ Quick Start (Load directly into Chrome / Opera / Brave)
-
-If `dist/` is already built:
-1. Open your browser and go to `chrome://extensions` (or `opera://extensions` / `brave://extensions`).
-2. Turn on the **Developer mode** toggle (top-right corner).
-3. Click **Load unpacked** (top-left) and select the `dist/` folder.
-4. Open [Gmail Drafts](https://mail.google.com/#drafts), click the **DraftBlaster** toolbar icon, open **Settings (⚙️)**, and paste your **Gemini API Key**. Done!
+> **Automate sending your Gmail drafts in bulk directly from your browser.**  
+> **100% Client-Side • Zero Backend Servers • Safe & Human-Paced**
 
 ---
 
-## 📑 Table of Contents
-- [Why DraftBlaster?](#-why-draftblaster)
-- [🔒 100% Client-Side Architecture (No Backend Needed)](#-100-client-side-architecture-no-backend-needed)
-- [🛡️ Draft Integrity Guarantee (Drafts Never Change)](#️-draft-integrity-guarantee-drafts-never-change)
-- [📦 Building from Source (Developers)](#-building-from-source-developers)
-- [🚦 Complete Step-by-Step Usage Guide](#-complete-step-by-step-usage-guide)
-- [⚙️ Settings & Configuration](#️-settings--configuration)
-- [🤖 How Gemini AI Navigation Recovery Works](#-how-gemini-ai-navigation-recovery-works)
-- [🧪 Running Automated Tests](#-running-automated-tests)
-- [🔐 Security & Privacy](#-security--privacy)
+## 📖 Table of Contents
+1. [What is DraftBlaster?](#-what-is-draftblaster)
+2. [How Does it Work? (100% Client-Side)](#-how-does-it-work-100-client-side)
+3. [Beginner Quick Start Guide](#-beginner-quick-start-guide)
+   - [Step 1: Get Your Free Gemini API Key](#step-1-get-your-free-gemini-api-key)
+   - [Step 2: Prepare the Extension Files (One-Time Build)](#step-2-prepare-the-extension-files-one-time-build)
+   - [Step 3: Load the Extension into Google Chrome](#step-3-load-the-extension-into-google-chrome)
+   - [Step 4: Load into Other Browsers (Opera, Brave, Edge, Firefox)](#step-4-load-into-other-browsers)
+4. [Step-by-Step Usage Guide (How to Send Drafts)](#-step-by-step-usage-guide)
+5. [Practicing Safely with "Mock Mode"](#-practicing-safely-with-mock-mode)
+6. [Settings & Customization](#-settings--customization)
+7. [Frequently Asked Questions (FAQ) & Troubleshooting](#-frequently-asked-questions-faq--troubleshooting)
 
 ---
 
-## 💡 Why DraftBlaster?
+## 💡 What is DraftBlaster?
 
-When managing bulk outreach, newsletters, or follow-ups, users often prepare dozens or hundreds of drafts in Gmail and need to click "Send" on each one individually. 
+If you frequently write multiple email drafts in Gmail (for follow-ups, outreach, newsletters, or notifications), clicking into each draft and pressing "Send" one by one is repetitive and time-consuming.
 
-**DraftBlaster** automates this tedious process directly from your browser. It scans your existing Gmail drafts, verifies safety criteria, lets you review and select which drafts to send, and sends them one by one with customizable, human-like delays—all without running any external servers or background scripts.
+**DraftBlaster** is a browser extension that:
+- 🔍 **Scans all your ready drafts** in your Gmail Drafts folder.
+- 📋 **Lists them cleanly** so you can choose which ones to send.
+- ⏱️ **Sends them one-by-one automatically** with natural, randomized delays (1.5 to 4 seconds) so Gmail never flags your account as a spam bot.
+- 🛡️ **Guarantees Draft Integrity**: Your email bodies, subjects, recipients, and attachments are **never modified**. DraftBlaster sends them exactly as you wrote them.
+- 🛑 **Instant STOP button**: Pause or cancel sending at any moment with one click.
 
 ---
 
-## 🔒 100% Client-Side Architecture (No Backend Needed)
+## 🔒 How Does it Work? (100% Client-Side)
 
-DraftBlaster is completely self-contained within your browser. There is **no backend server**, **no middleware**, and **no external database** required.
+### Do I need a backend server running?
+**No! You do NOT need any server or terminal running while using DraftBlaster.**
+
+- **Runs in your browser tab**: DraftBlaster interacts directly with the Gmail webpage (`mail.google.com`) on your computer.
+- **No external servers or databases**: No data ever leaves your computer except when Gmail sends your email through Google's official servers.
+- **Why do we run `npm run build` once?**  
+  The extension is written in TypeScript and React for safety and a modern UI. Web browsers only understand plain JavaScript. Running `npm run build` is simply a **one-time translator** that converts the code into static files in the `dist/` folder. Once built, Node/npm is finished and you never need to keep a terminal open.
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                             YOUR BROWSER                                 │
-│                                                                          │
-│  ┌──────────────────────┐              ┌──────────────────────────────┐  │
-│  │   DraftBlaster UI    │ ───────────> │ Gmail Web Tab                │  │
-│  │   (Popup / React)    │  DOM Events  │ (mail.google.com/#drafts)    │  │
-│  └──────────┬───────────┘              └──────────────────────────────┘  │
-│             │                                         │                  │
-│             │ (Only during UI recovery)               │ Direct Sending   │
-│             ▼                                         ▼                  │
-│  ┌──────────────────────┐              ┌──────────────────────────────┐  │
-│  │ Google Gemini API    │              │ Google Mail Delivery         │  │
-│  │ (Direct HTTPS Call)  │              │ (Native Gmail Infrastructure)│  │
-│  └──────────────────────┘              └──────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-- **Zero Backend Servers**: No Node.js, Express, Python, or Docker instances to host or run.
-- **Zero Cloud Databases**: No Firestore, Supabase, or SQL databases. Everything lives in `chrome.storage.local`.
-- **Zero Gmail API / OAuth Setup**: Operates directly on the rendered Gmail web page using safe DOM automation. You don't need Google Cloud Console OAuth verification.
-- **Direct Gemini Client**: Navigation recovery requests are sent directly from your browser to Google's Gemini endpoint via client-side HTTPS.
-
----
-
-## 🛡️ Draft Integrity Guarantee (Drafts Never Change)
-
-DraftBlaster follows a strict **zero-modification principle**:
-
-1. **Draft Content is Never Altered**: The subject line, email body, recipient list, CC/BCC, and attachments remain 100% intact exactly as you composed them in Gmail.
-2. **Read-and-Send Only**: The extension only reads metadata (recipient, subject snippet) to display in the extension UI, opens the draft window, verifies that it matches, and triggers the native Gmail Send button.
-3. **No Injected Tracking / Footers**: No extra text, signatures, or tracking pixels are ever added to your emails.
-
----
-
-## 📦 Building from Source (Developers)
-
-If you clone the repository to a new machine or modify the TypeScript/React code:
-
-### 1. Install Dependencies & Build
-```bash
-# 1. Install build tools and dependencies (Vite, React, TypeScript)
-npm install
-
-# 2. Compile static extension into dist/
-npm run build
-```
-
-> **Why `npm install`?**  
-> GitHub repositories do not store third-party packages (`node_modules`). `npm install` is only needed when building from source code to download Vite and React for compilation.
-
-### 2. (Optional) Configure Default Environment Variables
-You can optionally bake a default API key into the build using `.env` (or just paste it into the UI after loading):
-```bash
-cp .env.example .env
-```
-Edit `.env`:
-```env
-VITE_GEMINI_API_KEY=your_gemini_api_key_here
-VITE_GEMINI_MODEL=gemini-2.5-flash
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        YOUR COMPUTER / BROWSER                          │
+│                                                                         │
+│  ┌───────────────────────┐             ┌─────────────────────────────┐  │
+│  │   DraftBlaster Popup  │ ──────────> │ Gmail Web Tab               │  │
+│  │   (Inside Chrome)     │ DOM clicks  │ (mail.google.com/#drafts)   │  │
+│  └───────────┬───────────┘             └──────────────┬──────────────┘  │
+│              │                                        │                 │
+│              │ (Only if UI gets stuck)                │ Native Delivery │
+│              ▼                                        ▼                 │
+│  ┌───────────────────────┐             ┌─────────────────────────────┐  │
+│  │ Google Gemini API     │             │ Google Mail Servers         │  │
+│  │ (Client HTTPS call)   │             │ (Delivers your emails)      │  │
+│  └───────────────────────┘             └─────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🚦 Complete Step-by-Step Usage Guide
+## 🚦 Beginner Quick Start Guide
 
-### Phase 1: Prepare Your Drafts in Gmail
-1. Log into your standard Gmail account at [mail.google.com](https://mail.google.com).
-2. Create your email drafts normally. Fill in the recipients, subjects, body copy, and any attachments.
-3. Navigate to your **Drafts** view ([mail.google.com/#drafts](https://mail.google.com/#drafts)).
+Follow these 3 simple steps to install and start using DraftBlaster:
 
-### Phase 2: Scan Drafts
-1. Click the **DraftBlaster** extension icon in your browser toolbar to open the popup.
-2. Click the **Scan Drafts** button.
-3. DraftBlaster reads the active Gmail Drafts list and displays:
-   - Recipient email address.
-   - Subject line preview.
-   - Total draft count.
+### Step 1: Get Your Free Gemini API Key
 
-### Phase 3: Review and Select
-1. By default, all scanned drafts up to your configured Run Limit (e.g. 500) are selected.
-2. You can uncheck any individual drafts you wish to skip.
+DraftBlaster uses Google's Gemini AI purely as an intelligent fallback to recover navigation if Gmail pops up an unexpected modal or dialog.
 
-### Phase 4: Confirmation & Safe Sending
-1. Click the **SEND SELECTED** button.
-2. A confirmation modal will appear displaying:
-   - Total number of selected drafts.
-   - Pacing parameters (e.g., 1.5s – 4.0s randomized delay per email).
-   - Recipient verification status.
-3. Click **CONFIRM & SEND**.
-4. DraftBlaster will sequentially:
-   - Open each draft.
-   - Perform safety checks (ensuring valid recipient and compose window presence).
-   - Click the native Gmail Send button.
-   - Apply a randomized human-like delay before proceeding to the next draft.
-5. **Emergency Stop**: You can click the **STOP** button at any time during the run to immediately halt sending.
+1. Go to [Google AI Studio (aistudio.google.com)](https://aistudio.google.com/).
+2. Sign in with your Google account.
+3. Click **"Get API key"** and then **"Create API key"**.
+4. Copy your API key (it starts with `AIza...`). Keep it handy—you will paste it directly into the extension UI!
 
 ---
 
-## ⚙️ Settings & Configuration
+### Step 2: Prepare the Extension Files (One-Time Build)
 
-Click the **Gear Icon (⚙️)** in the DraftBlaster popup to customize options:
+Make sure you have [Node.js](https://nodejs.org/) installed on your computer.
 
-| Setting | Default | Description |
+1. Open your computer's **Terminal** (or Command Prompt / PowerShell on Windows).
+2. Navigate to the project directory:
+   ```bash
+   cd /path/to/draftblaster
+   ```
+3. Install the compilation tools:
+   ```bash
+   npm install
+   ```
+4. Compile the extension files:
+   ```bash
+   npm run build
+   ```
+   *You will now see a new folder called `dist/` created in the project folder. This contains the ready-to-use extension!*
+
+---
+
+### Step 3: Load the Extension into Google Chrome
+
+1. Open **Google Chrome**.
+2. Type `chrome://extensions` into your Chrome address bar and press **Enter**.
+3. In the top-right corner, switch the **Developer mode** toggle to **ON** (blue).
+4. In the top-left corner, click the **"Load unpacked"** button.
+5. In the file picker, select the **`dist`** folder inside your `draftblaster` project folder and click **Select / Open**.
+6. That's it! **DraftBlaster** is now installed in your browser.
+7. Click the **Puzzle icon (Extensions)** in Chrome's top-right toolbar and click the **Pin 📌** icon next to DraftBlaster so it is always visible.
+
+---
+
+### Step 4: Load into Other Browsers
+
+- **Opera**: Go to `opera://extensions` → enable **Developer Mode** (top-right) → click **Load unpacked** → select `dist/`.
+- **Brave**: Go to `brave://extensions` → enable **Developer mode** → click **Load unpacked** → select `dist/`.
+- **Microsoft Edge**: Go to `edge://extensions` → enable **Developer mode** (left sidebar) → click **Load unpacked** → select `dist/`.
+- **Mozilla Firefox**: Go to `about:debugging#/runtime/this-firefox` → click **Load Temporary Add-on...** → select `manifest.json` inside the `dist/` folder.
+
+---
+
+## 🎯 Step-by-Step Usage Guide
+
+### 1. Compose Your Drafts in Gmail
+Open [Gmail](https://mail.google.com) and create the email drafts you want to send. Add the recipient email, subject line, email text, and any attachments. Leave them saved in your **Drafts** folder.
+
+### 2. Navigate to Drafts View
+Click on **Drafts** in Gmail's left sidebar, or go directly to:  
+👉 **[https://mail.google.com/#drafts](https://mail.google.com/#drafts)**
+
+### 3. Open DraftBlaster & Add Your API Key (First Time Only)
+1. Click the **DraftBlaster 🚀** icon in your browser toolbar.
+2. Click the **Gear icon (⚙️)** in the top right corner to open Settings.
+3. Paste your **Gemini API Key** into the API Key field.
+4. Click **Save Settings** (The key is securely saved into your browser's private storage and will be remembered even when you close Chrome).
+5. Click the **X** to close Settings.
+
+### 4. Scan and Send!
+1. In the DraftBlaster popup, click the blue **"Scan Drafts"** button.
+2. DraftBlaster will scan the drafts visible on your screen and display them in a list.
+3. All drafts are automatically checked. If you want to skip any draft, uncheck its box.
+4. Click **"SEND SELECTED"**.
+5. A confirmation dialog will pop up showing the number of emails to be sent. Click **"CONFIRM & SEND"**.
+6. DraftBlaster will open each draft, verify everything, and send it with human-like pacing.
+7. **Need to pause?** Click the red **"STOP"** button at any time.
+
+---
+
+## 🧪 Practicing Safely with "Mock Mode"
+
+If you want to test how DraftBlaster works without actually sending real emails to anyone:
+
+1. Click the **DraftBlaster** icon → Click **Settings (⚙️)**.
+2. Check the box for **"MOCK MODE (Test UI & flows without Gmail)"**.
+3. Click **Save Settings**.
+4. Now click **Scan Drafts** and **SEND SELECTED**.
+5. DraftBlaster will simulate the entire scanning, validation, countdowns, and sending animations using mock data, with zero risk of sending an email.
+6. Once you're comfortable, open Settings and turn Mock Mode **OFF**.
+
+---
+
+## ⚙️ Settings & Customization
+
+| Setting | Default | What it does |
 |---|---|---|
-| **Gemini API Key** | Empty / Stored locally | Your Google Gemini API key used for UI navigation recovery. Paste it directly in this field and click Save. |
-| **Gemini Model** | `gemini-2.5-flash` | The Gemini model name used for vision/navigation assistance. |
-| **Run Limit** | `500` | Maximum number of drafts to process in a single automated batch. |
-| **Min Delay (ms)** | `1500` | Minimum wait time between sends (in milliseconds) to prevent rate limiting. |
-| **Max Delay (ms)** | `4000` | Maximum wait time between sends to maintain human-like interaction pacing. |
-| **Mock Mode** | `Off` | Simulates the entire scanning and sending workflow without actually clicking Send or modifying Gmail. Useful for testing UI and flows risk-free. |
+| **Gemini API Key** | Empty | Your Google Gemini API key used for UI navigation recovery. Stored exclusively on your computer in `chrome.storage.local`. |
+| **Gemini Model** | `gemini-2.5-flash` | The AI model used for navigation analysis. |
+| **Run Limit** | `500` | Maximum number of drafts to process in a single run. |
+| **Min Delay (ms)** | `1500` | The minimum wait time (in milliseconds, 1.5s) between sending emails. |
+| **Max Delay (ms)** | `4000` | The maximum wait time (in milliseconds, 4.0s) between sending emails. |
+| **Mock Mode** | `Off` | Simulates the entire process with fake drafts for safe demonstration and testing. |
 
 ---
 
-## 🤖 How Gemini AI Navigation Recovery Works
+## ❓ Frequently Asked Questions (FAQ) & Troubleshooting
 
-If Gmail's user interface updates, or if a modal, prompt, or overlay temporarily blocks the Drafts view:
-1. DraftBlaster captures a snapshot of the interface state.
-2. It sends a structured analysis prompt to the Gemini API over client-side HTTPS.
-3. Gemini determines the appropriate navigation action (e.g., dismissing an overlay, returning to `#drafts`).
-4. **Strict Safety Boundary**: AI recommendations are strictly restricted to navigation/recovery actions (`OPEN_DRAFTS`, `DISMISS_MODAL`). The AI is cryptographically and logically forbidden from ever triggering the `SEND` action directly.
+#### Q: Do I need to keep a terminal or command prompt open?
+**No.** The terminal was only used for the one-time `npm run build` step. After loading the `dist/` folder into Chrome, you can close your terminal completely.
 
----
+#### Q: When I close Chrome and reopen it tomorrow, do I have to set it up again?
+**No.** Chrome remembers your loaded unpacked extension and all your saved settings (including your API key). It will be ready whenever you open Gmail.
 
-## 🧪 Running Automated Tests
+#### Q: Will DraftBlaster modify the text or subject of my drafts?
+**Never.** DraftBlaster has a strict read-and-send policy. It never edits your subject, body text, or attachments.
 
-DraftBlaster includes comprehensive unit tests and safety assertion suites using Vitest:
+#### Q: The popup says "No drafts detected. Ensure Gmail Drafts is open."
+Make sure you are on active tab `https://mail.google.com/#drafts` and have at least one draft in your Gmail account. Refresh the Gmail page and try clicking **Scan Drafts** again.
 
-```bash
-npm test
-```
-
----
-
-## 🔐 Security & Privacy
-
-- **Your Emails Remain Private**: Email content never leaves your browser. Content is only rendered by Gmail and transmitted directly through Google Mail servers.
-- **Local Storage Only**: API keys and preferences are stored exclusively on your device via `chrome.storage.local`.
-- **No Third-Party Analytics**: No telemetry, analytics trackers, or external logging.
+#### Q: Where is my API key stored? Is it sent to anyone?
+Your API key is saved exclusively in your own browser's local sandbox storage (`chrome.storage.local`). It is never sent to any developer server or third party—only directly to Google's official Gemini endpoint when navigation recovery is needed.
