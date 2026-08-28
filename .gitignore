@@ -5,3 +5,13 @@ dist
 .env.*.local
 *.log
 .DS_Store
+
+# Python & OAuth Secrets
+credentials.json
+token.json
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
