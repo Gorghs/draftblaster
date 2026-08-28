@@ -15,10 +15,21 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 
 const SETTINGS_KEY = 'draftblaster_settings';
 
+function getStorage() {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    return chrome.storage.local;
+  }
+  if (typeof (globalThis as any).browser !== 'undefined' && (globalThis as any).browser.storage?.local) {
+    return (globalThis as any).browser.storage.local;
+  }
+  return null;
+}
+
 export async function getSettings(): Promise<ExtensionSettings> {
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      const data = await chrome.storage.local.get(SETTINGS_KEY);
+    const storage = getStorage();
+    if (storage) {
+      const data = await storage.get(SETTINGS_KEY);
       if (data && data[SETTINGS_KEY]) {
         return { ...DEFAULT_SETTINGS, ...data[SETTINGS_KEY] };
       }
@@ -33,8 +44,9 @@ export async function saveSettings(settings: Partial<ExtensionSettings>): Promis
   const current = await getSettings();
   const updated = { ...current, ...settings };
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      await chrome.storage.local.set({ [SETTINGS_KEY]: updated });
+    const storage = getStorage();
+    if (storage) {
+      await storage.set({ [SETTINGS_KEY]: updated });
     }
   } catch (err) {
     console.error('[DraftBlaster] Failed to save settings to storage:', err);

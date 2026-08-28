@@ -16,10 +16,21 @@ export const INITIAL_RUN_STATE: RunState = {
 
 const RUN_STATE_KEY = 'draftblaster_run_state';
 
+function getStorage() {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    return chrome.storage.local;
+  }
+  if (typeof (globalThis as any).browser !== 'undefined' && (globalThis as any).browser.storage?.local) {
+    return (globalThis as any).browser.storage.local;
+  }
+  return null;
+}
+
 export async function getStoredRunState(): Promise<RunState> {
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      const data = await chrome.storage.local.get(RUN_STATE_KEY);
+    const storage = getStorage();
+    if (storage) {
+      const data = await storage.get(RUN_STATE_KEY);
       if (data && data[RUN_STATE_KEY]) {
         return { ...INITIAL_RUN_STATE, ...data[RUN_STATE_KEY] };
       }
@@ -34,8 +45,9 @@ export async function saveRunState(state: Partial<RunState>): Promise<RunState> 
   const current = await getStoredRunState();
   const updated = { ...current, ...state };
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      await chrome.storage.local.set({ [RUN_STATE_KEY]: updated });
+    const storage = getStorage();
+    if (storage) {
+      await storage.set({ [RUN_STATE_KEY]: updated });
     }
   } catch (err) {
     console.error('[DraftBlaster] Failed to save run state:', err);
