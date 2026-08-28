@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ExtensionSettings, RunState, DraftItem } from '../types';
 import { getSettings, saveSettings, DEFAULT_SETTINGS } from '../storage/settings';
 import { getStoredRunState, INITIAL_RUN_STATE, resetStoredRunState, saveRunState } from '../storage/runState';
+import { handleExtensionMessage } from '../automation/runController';
 import { DraftList } from './components/DraftList';
 import { SettingsModal } from './components/SettingsModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
@@ -29,35 +30,48 @@ export const App: React.FC = () => {
   };
 
   const loadData = async () => {
-    const [s, r] = await Promise.all([getSettings(), getStoredRunState()]);
-    setSettings(s);
-    setRunState(r);
+    try {
+      const [s, r] = await Promise.all([getSettings(), getStoredRunState()]);
+      setSettings(s || DEFAULT_SETTINGS);
+      setRunState(r || INITIAL_RUN_STATE);
+    } catch (err) {
+      console.warn('[DraftBlaster] Error loading data:', err);
+    }
     checkGmailConnection();
   };
 
   const checkGmailConnection = () => {
-    if (typeof chrome === 'undefined' || !chrome.tabs) return;
+    if (typeof chrome === 'undefined' || !chrome.tabs?.query) return;
 
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]?.id && tabs[0]?.url?.includes('mail.google.com')) {
-        chrome.tabs.sendMessage(tabs[0].id, { type: 'GMAIL_STATUS_PING' }, (response) => {
-          if (chrome.runtime.lastError || !response) {
-            setIsGmailConnected(false);
-          } else {
-            setIsGmailConnected(true);
-          }
-        });
-      } else {
-        setIsGmailConnected(false);
-      }
-    });
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (chrome.runtime?.lastError) {
+          setIsGmailConnected(false);
+          return;
+        }
+        const activeTab = tabs?.[0];
+        if (activeTab?.id && activeTab?.url && activeTab.url.includes('mail.google.com')) {
+          chrome.tabs.sendMessage(activeTab.id, { type: 'GMAIL_STATUS_PING' }, (response) => {
+            if (chrome.runtime?.lastError || !response) {
+              setIsGmailConnected(false);
+            } else {
+              setIsGmailConnected(true);
+            }
+          });
+        } else {
+          setIsGmailConnected(false);
+        }
+      });
+    } catch {
+      setIsGmailConnected(false);
+    }
   };
 
   useEffect(() => {
     loadData();
 
     const listener = (message: any) => {
-      if (message.type === 'STATE_UPDATED' && message.state) {
+      if (message?.type === 'STATE_UPDATED' && message.state) {
         setRunState(message.state);
       }
     };
@@ -79,30 +93,37 @@ export const App: React.FC = () => {
   const sendTabMessage = (msg: any): Promise<any> => {
     return new Promise((resolve) => {
       if (settings.mockMode) {
-        import('../automation/runController').then(({ handleExtensionMessage }) => {
-          handleExtensionMessage(msg, (res) => resolve(res));
-        });
+        handleExtensionMessage(msg, (res) => resolve(res));
         return;
       }
 
-      if (typeof chrome === 'undefined' || !chrome.tabs) {
+      if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
         resolve({ success: false, error: 'Extension tab API unavailable' });
         return;
       }
 
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs[0]?.id) {
-          resolve({ success: false, error: 'No active Gmail tab' });
-          return;
-        }
-        chrome.tabs.sendMessage(tabs[0].id, msg, (response) => {
-          if (chrome.runtime.lastError) {
+      try {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (chrome.runtime?.lastError) {
             resolve({ success: false, error: chrome.runtime.lastError.message });
-          } else {
-            resolve(response);
+            return;
           }
+          const activeTab = tabs?.[0];
+          if (!activeTab?.id) {
+            resolve({ success: false, error: 'No active Gmail tab found. Open mail.google.com' });
+            return;
+          }
+          chrome.tabs.sendMessage(activeTab.id, msg, (response) => {
+            if (chrome.runtime?.lastError) {
+              resolve({ success: false, error: chrome.runtime.lastError.message });
+            } else {
+              resolve(response);
+            }
+          });
         });
-      });
+      } catch (err: any) {
+        resolve({ success: false, error: err?.message || 'Failed to send tab message' });
+      }
     });
   };
 

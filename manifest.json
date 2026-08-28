@@ -18,7 +18,7 @@
     "default_title": "DraftBlaster"
   },
   "background": {
-    "scripts": ["src/background/serviceWorker.ts"],
+    "service_worker": "src/background/serviceWorker.ts",
     "type": "module"
   },
   "content_scripts": [
