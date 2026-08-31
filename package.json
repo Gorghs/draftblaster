@@ -1,6 +1,6 @@
 {
   "name": "draftblaster",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Personal-use Opera/Chromium extension for automating Gmail draft sending with human pacing and Gemini navigation recovery.",
   "private": true,
   "type": "module",
