@@ -1,36 +1,61 @@
 # 🌐 DraftBlaster (Google Chrome & Chromium Edition) 🚀
 
-> **A 100% Client-Side Personal Browser Extension (Manifest V3) for Google Chrome, Opera, Brave, and Microsoft Edge to Automate Sending Gmail Drafts with Human Pacing & Gemini AI Navigation Recovery.**  
-> **100% Client-Side • Zero Backend Servers Needed • Safe & Human-Paced**
+<p align="center">
+  <img src="public/icons/icon128.png" alt="DraftBlaster Logo" width="128" height="128" />
+</p>
+
+<p align="center">
+  <strong>The 100% Client-Side Manifest V3 Browser Extension for Google Chrome, Opera, Brave, and Edge to Automate Sending Gmail Drafts in Bulk with Human-Paced Delays & Gemini AI Recovery.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Gorghs/draftblaster/blob/chrome-extension/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License" /></a>
+  <a href="https://github.com/Gorghs/draftblaster/releases"><img src="https://img.shields.io/badge/Version-1.0.1-brightgreen.svg?style=for-the-badge" alt="Version 1.0.1" /></a>
+  <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Chrome-Manifest%20V3-yellow.svg?style=for-the-badge&logo=googlechrome" alt="Chrome MV3" /></a>
+  <img src="https://img.shields.io/badge/Backend-Zero%20Servers-success.svg?style=for-the-badge" alt="Zero Backend" />
+  <img src="https://img.shields.io/badge/Draft%20Integrity-100%25%20Preserved-purple.svg?style=for-the-badge" alt="Draft Integrity" />
+</p>
 
 ---
 
-## 🔀 Repository Branch Guide
+## 🔀 Multi-Platform Repository Branches
 
-This repository provides three dedicated solutions for automating Gmail draft sending across different platforms:
+DraftBlaster is engineered across three dedicated platform branches:
 
-| Branch | Platform / Edition | Purpose | When to Use |
+| Branch | Platform / Edition | Description | Quick Link |
 |---|---|---|---|
-| **`chrome-extension`** *(You are here)* | **Google Chrome & Chromium** | Manifest V3 Extension for Chrome, Opera, Brave, and Edge | Use this branch if you use Chrome, Opera, Brave, or Edge. |
-| **[`main`](https://github.com/Gorghs/draftblaster/tree/main)** | **Mozilla Firefox** | Native Firefox Manifest V3 Extension (`.xpi` / Temporary Add-on) | 👉 **Switch to the [`main`](https://github.com/Gorghs/draftblaster/tree/main) branch** for Firefox and Firefox Developer Edition. |
-| **[`feature/gmail-api-scheduler`](https://github.com/Gorghs/draftblaster/tree/feature/gmail-api-scheduler)** | **Python / Cloud / Server** | Standalone Python Script using Google Gmail API v1 & OAuth 2.0 | 👉 **Switch to the [`feature/gmail-api-scheduler`](https://github.com/Gorghs/draftblaster/tree/feature/gmail-api-scheduler) branch** for automated headless 9:00 AM cron jobs. |
+| **`chrome-extension`** *(Active)* | **🌐 Google Chrome / Chromium** | Manifest V3 Extension for Chrome, Opera, Brave, and Edge | [View Chrome Branch](https://github.com/Gorghs/draftblaster/tree/chrome-extension) |
+| **[`main`](https://github.com/Gorghs/draftblaster/tree/main)** | **🦊 Mozilla Firefox** | Native Firefox Manifest V3 Extension (`.xpi` installer & source) | [👉 Go to Firefox Branch](https://github.com/Gorghs/draftblaster/tree/main) |
+| **[`feature/gmail-api-scheduler`](https://github.com/Gorghs/draftblaster/tree/feature/gmail-api-scheduler)** | **🐍 Python / Cloud / Cron** | Headless Python Script using official Gmail API v1 & OAuth 2.0 (9:00 AM Scheduler) | [👉 Go to Python Branch](https://github.com/Gorghs/draftblaster/tree/feature/gmail-api-scheduler) |
 
 ---
 
-## ⚡ Quick Installation for Google Chrome, Opera, Brave & Edge
+## 🌟 Why DraftBlaster?
 
-### Step 1: Clone the Repository & Build
-Open your terminal and run:
+Manually opening and clicking **Send** on dozens of prepared Gmail drafts is slow and tedious. Traditional mass-mailing software requires giving full inbox access to third-party servers.
+
+**DraftBlaster changes that**:
+- 🚀 **100% Client-Side Execution**: Runs directly inside your Google Chrome / Chromium browser on `mail.google.com`.
+- 🛡️ **Strict Draft Integrity**: Body text, subjects, recipients, CC/BCC, and attachments are **never modified or altered**.
+- ⏱️ **Natural Human Pacing**: Sends each draft with randomized 1.5s–4.0s delays to keep your Google account completely safe.
+- 🛑 **Emergency Stop**: One-click instant halt at any second during a batch run.
+- 🤖 **Gemini Navigation Recovery**: Uses Google's Gemini AI purely as a navigation fallback if unexpected UI popups block the view.
+
+---
+
+## ⚡ Quick Installation (Google Chrome / Opera / Brave / Edge)
+
+### Step 1: Clone & Build
 
 ```bash
-# 1. Clone the repository and switch to the chrome-extension branch
+# 1. Clone this branch
 git clone -b chrome-extension https://github.com/Gorghs/draftblaster.git
 cd draftblaster
 
 # 2. Install dependencies
 npm install
 
-# 3. Build the extension (generates the dist folder)
+# 3. Build static extension bundle
 npm run build
 ```
 
@@ -38,7 +63,7 @@ npm run build
 
 ---
 
-### Step 2: Load into Google Chrome (or Chromium Browser)
+### Step 2: Load into Chrome / Chromium
 
 1. Open **Google Chrome** and navigate to:
    ```
@@ -56,34 +81,28 @@ npm run build
 
 ---
 
-## 🚦 How to Use DraftBlaster in Chrome
+## 🚦 Step-by-Step Usage Guide
 
 1. Open [Gmail Drafts](https://mail.google.com/#drafts) in Google Chrome.
-2. Click the **DraftBlaster 🚀** icon in your browser toolbar.
-3. Click the **Gear icon (⚙️)** to open **Settings**:
-   - Paste your **Gemini API Key** (get a free key from [Google AI Studio](https://aistudio.google.com/)).
-   - Click **Save Settings** (persists securely across Chrome restarts in `chrome.storage.local`).
-4. Click **"Scan Drafts"** to automatically list all drafts currently in your Drafts folder.
-5. Review the selection and click **"SEND SELECTED"** → **"CONFIRM & SEND"**.
-6. DraftBlaster will sequentially open and send each draft with randomized human-like delays (1.5s–4.0s).
-7. You can click **STOP** at any time to pause or halt immediately.
+2. Click the **DraftBlaster 🚀** icon in your toolbar.
+3. Open **Settings (⚙️)**:
+   - Paste your free **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/).
+   - Click **Save Settings** (persists locally in browser storage).
+4. Click **"Scan Drafts"** to list all available drafts.
+5. Review draft list, select which drafts to send, and click **"SEND SELECTED"** → **"CONFIRM & SEND"**.
+6. DraftBlaster will send your emails one-by-one with human-paced delays.
 
 ---
 
-## 🧪 Safe Testing with "Mock Mode"
+## 🔒 Security & Privacy Architecture
 
-Want to test the full UI flow and animations risk-free before sending real emails?
-
-1. Open DraftBlaster → Click **Settings (⚙️)**.
-2. Check the box for **"MOCK MODE"** and click **Save Settings**.
-3. Click **Scan Drafts** and **SEND SELECTED**.
-4. The extension runs with simulated drafts so you can see the state machine in action.
-5. Turn **MOCK MODE** off when you are ready to send your real Gmail drafts.
+- **Zero Cloud Proxies**: Operates strictly within Chrome's local extension sandbox.
+- **Local Secret Storage**: API keys are saved exclusively in `chrome.storage.local`.
+- **Encrypted Header Authentication**: Gemini requests transmit keys via secure `x-goog-api-key` TLS request headers.
+- **Read our complete [Security Policy](SECURITY.md)**.
 
 ---
 
-## 🛡️ Core Guarantees & Security
+## 📄 License
 
-- **Drafts Never Change**: Email body, subjects, recipients, CC/BCC, and attachments are 100% preserved and never modified.
-- **100% Client-Side**: Operates directly on the Gmail web interface. No servers, no middleware, no telemetry.
-- **Local Persistence**: API keys and configurations are saved exclusively to your browser's private local profile (`chrome.storage.local`).
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
