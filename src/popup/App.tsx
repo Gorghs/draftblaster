@@ -237,21 +237,21 @@ export const App: React.FC = () => {
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            backgroundColor: '#0284c7',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <Mail size={18} color="#ffffff" />
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <img
+            src="/icons/icon32.png"
+            alt="DraftBlaster"
+            width={32}
+            height={32}
+            style={{
+              borderRadius: '8px',
+              boxShadow: '0 2px 8px rgba(14, 165, 233, 0.4)',
+              display: 'block',
+            }}
+          />
           <div>
-            <h1 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>
-              DraftBlaster
+            <h1 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.02em' }}>
+              DraftBlaster 🚀
             </h1>
             <span style={{ fontSize: '11px', color: '#94a3b8' }}>
               Personal Gmail Draft Automation

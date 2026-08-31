@@ -52,7 +52,7 @@ ${context.visibleTextSummary || 'No summary available'}
 
 What navigation action should the extension take? Return strict JSON.`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent`;
 
     const requestBody = {
       contents: [
@@ -71,11 +71,12 @@ What navigation action should the extension take? Return strict JSON.`;
     };
 
     try {
-      // Direct client-side HTTPS request
+      // Direct client-side HTTPS request with secure header authentication
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': this.apiKey,
         },
         body: JSON.stringify(requestBody),
       });

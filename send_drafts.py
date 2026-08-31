@@ -122,11 +122,15 @@ def get_gmail_service():
             creds = flow.run_local_server(port=0)
             logger.info("OAuth Authentication successful.")
 
-        # Save credentials for subsequent runs
+        # Save credentials for subsequent runs with restricted user permissions
         try:
             with open(TOKEN_FILE, 'w', encoding='utf-8') as token:
                 token.write(creds.to_json())
-            logger.info("Saved valid authorization credentials to %s", TOKEN_FILE)
+            try:
+                os.chmod(TOKEN_FILE, 0o600)
+            except Exception:
+                pass
+            logger.info("Saved valid authorization credentials to %s (chmod 600)", TOKEN_FILE)
         except Exception as e:
             logger.error("Failed to write to %s: %s", TOKEN_FILE, e)
 
