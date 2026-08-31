@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node scripts/postbuild.js",
+    "build:xpi": "npm run build && rm -f draftblaster.xpi && cd dist && zip -r ../draftblaster.xpi * && cd ..",
     "preview": "vite preview",
     "test": "vitest run"
   },
