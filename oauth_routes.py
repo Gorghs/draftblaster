@@ -1,6 +1,6 @@
 """
 OAuth 2.0 Web Flow Routes for one-time Google authorization.
-Provides /auth/login and /auth/callback to obtain a long-lived refresh token for Render.
+Supports both /auth/login, /oauth/login and /auth/callback, /oauth/callback.
 """
 
 import logging
@@ -16,7 +16,20 @@ from config import (
 )
 
 logger = logging.getLogger("oauth_routes")
-router = APIRouter(prefix="/auth", tags=["Google OAuth"])
+router = APIRouter(tags=["Google OAuth"])
+
+
+def get_effective_redirect_uri(request: Request) -> str:
+    """Dynamically determines the redirect URI matching the request and config."""
+    if OAUTH_REDIRECT_URI and "localhost" not in OAUTH_REDIRECT_URI:
+        return OAUTH_REDIRECT_URI
+
+    # If running on Render, construct from current host
+    host = request.base_url.hostname or "localhost"
+    path = "/oauth/callback" if "oauth" in request.url.path else "/auth/callback"
+    scheme = "https" if "onrender.com" in host or request.url.scheme == "https" else "http"
+    port_str = f":{request.base_url.port}" if request.base_url.port and scheme == "http" else ""
+    return f"{scheme}://{host}{port_str}{path}"
 
 
 def create_oauth_flow(redirect_uri: str) -> Flow:
@@ -45,17 +58,14 @@ def create_oauth_flow(redirect_uri: str) -> Flow:
     return flow
 
 
-@router.get("/login", summary="Initiate Google OAuth 2.0 Authorization")
+@router.get("/auth/login", summary="Initiate Google OAuth 2.0 Authorization (/auth/login)")
+@router.get("/oauth/login", summary="Initiate Google OAuth 2.0 Authorization (/oauth/login)")
 def auth_login(request: Request):
     """
     Generates the Google OAuth authorization URL requesting offline access
     and prompt=consent so a refresh token is guaranteed to be returned.
     """
-    # Use configured redirect URI, or infer from current request host if default localhost
-    redirect_uri = OAUTH_REDIRECT_URI
-    if "localhost" in redirect_uri and "onrender.com" in request.base_url.hostname:
-        redirect_uri = f"https://{request.base_url.hostname}/auth/callback"
-
+    redirect_uri = get_effective_redirect_uri(request)
     flow = create_oauth_flow(redirect_uri)
     
     authorization_url, state = flow.authorization_url(
@@ -68,7 +78,8 @@ def auth_login(request: Request):
     return RedirectResponse(authorization_url)
 
 
-@router.get("/callback", summary="Handle Google OAuth 2.0 Callback")
+@router.get("/auth/callback", summary="Handle Google OAuth 2.0 Callback (/auth/callback)")
+@router.get("/oauth/callback", summary="Handle Google OAuth 2.0 Callback (/oauth/callback)")
 def auth_callback(request: Request, code: str = None, error: str = None):
     """
     Exchanges authorization code for tokens, extracts the refresh token,
@@ -94,9 +105,7 @@ def auth_callback(request: Request, code: str = None, error: str = None):
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code.")
 
-    redirect_uri = OAUTH_REDIRECT_URI
-    if "localhost" in redirect_uri and request.base_url.hostname and "onrender.com" in request.base_url.hostname:
-        redirect_uri = f"https://{request.base_url.hostname}/auth/callback"
+    redirect_uri = get_effective_redirect_uri(request)
 
     try:
         flow = create_oauth_flow(redirect_uri)
