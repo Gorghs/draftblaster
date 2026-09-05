@@ -64,3 +64,16 @@ def test_missing_environment_variables():
         assert result["status"] == "failed"
         assert "No authentication configured" in result["errors"][0]["error"]
 
+
+def test_api_logs_endpoint():
+    """Test: /api/logs returns logs in memory."""
+    from main import logger
+    logger.info("Test log entry for Minecraft console")
+
+    response = client.get("/api/logs")
+    assert response.status_code == 200
+    data = response.json()
+    assert "logs" in data
+    assert isinstance(data["logs"], list)
+    assert any("Test log entry for Minecraft console" in entry.get("message", "") for entry in data["logs"])
+
