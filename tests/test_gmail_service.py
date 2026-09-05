@@ -80,4 +80,4 @@ def test_missing_credentials():
     """Verify error returned when email or password are missing."""
     result = send_all_drafts(user="", password="")
     assert result["status"] == "failed"
-    assert "Missing EMAIL_GMAIL_USER or EMAIL_GMAIL_PASSWORD" in result["errors"][0]["error"]
+    assert "No authentication configured" in result["errors"][0]["error"]

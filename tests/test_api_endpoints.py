@@ -62,5 +62,5 @@ def test_missing_environment_variables():
          patch("gmail_service.EMAIL_GMAIL_PASSWORD", ""):
         result = send_all_drafts(user="", password="")
         assert result["status"] == "failed"
-        assert "Missing EMAIL_GMAIL_USER or EMAIL_GMAIL_PASSWORD" in result["errors"][0]["error"]
+        assert "No authentication configured" in result["errors"][0]["error"]
 

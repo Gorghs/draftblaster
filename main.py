@@ -1,6 +1,6 @@
 """
 FastAPI application entrypoint for Gmail Draft Auto-Sender.
-Provides /health, /trigger, and dashboard for Render deployment using Gmail App Password.
+Supports both Gmail App Password (IMAP/SMTP) and Google OAuth 2.0.
 """
 
 import os
@@ -19,8 +19,11 @@ from config import (
     SEND_MINUTE,
     TRIGGER_SECRET,
     EMAIL_GMAIL_USER,
-    EMAIL_GMAIL_PASSWORD
+    EMAIL_GMAIL_PASSWORD,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_REFRESH_TOKEN
 )
+from oauth_routes import router as oauth_router
 from scheduler import evaluate_and_trigger, get_current_localized_time
 from state_store import get_state_store
 
@@ -39,12 +42,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Gmail Draft Auto-Sender Service...")
     logger.info("Timezone: %s | Daily Target: %02d:%02d", TIMEZONE_STR, SEND_HOUR, SEND_MINUTE)
     
-    if not EMAIL_GMAIL_USER:
-        logger.warning("EMAIL_GMAIL_USER is not set in environment variables.")
-    if not EMAIL_GMAIL_PASSWORD:
-        logger.warning("EMAIL_GMAIL_PASSWORD is not set in environment variables.")
+    if EMAIL_GMAIL_USER and EMAIL_GMAIL_PASSWORD:
+        logger.info("Auth Mode: Gmail App Password active for %s.", EMAIL_GMAIL_USER)
+    elif GOOGLE_CLIENT_ID and GOOGLE_REFRESH_TOKEN:
+        logger.info("Auth Mode: Google OAuth 2.0 active with refresh token.")
     else:
-        logger.info("Gmail App Password configured for user: %s. Automation ready.", EMAIL_GMAIL_USER)
+        logger.warning("No complete credentials found. Configure App Password or OAuth in environment.")
 
     yield
     logger.info("Shutting down Gmail Draft Auto-Sender Service...")
@@ -52,10 +55,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Gmail Draft Auto-Sender",
-    description="Automates sending all Gmail drafts at a configured daily time using Gmail App Password.",
-    version="2.1.0",
+    description="Automates sending all Gmail drafts at a configured daily time via App Password or OAuth.",
+    version="2.2.0",
     lifespan=lifespan
 )
+
+# Mount OAuth routes (/oauth/login, /auth/login, /oauth/callback, /auth/callback)
+app.include_router(oauth_router)
 
 
 def verify_trigger_secret(
@@ -91,8 +97,15 @@ def dashboard():
     store = get_state_store()
     last_run = store.get_last_run_info()
 
-    auth_status = "✅ Configured (Ready)" if (EMAIL_GMAIL_USER and EMAIL_GMAIL_PASSWORD) else "⚠️ Missing EMAIL_GMAIL_USER / EMAIL_GMAIL_PASSWORD"
-    user_display = EMAIL_GMAIL_USER if EMAIL_GMAIL_USER else "Not configured"
+    if EMAIL_GMAIL_USER and EMAIL_GMAIL_PASSWORD:
+        auth_mode = "Gmail App Password"
+        auth_status = f"✅ Active ({EMAIL_GMAIL_USER})"
+    elif GOOGLE_REFRESH_TOKEN:
+        auth_mode = "Google OAuth 2.0"
+        auth_status = "✅ Active (Refresh Token Configured)"
+    else:
+        auth_mode = "None"
+        auth_status = "⚠️ Missing Credentials (Set App Password or OAuth)"
 
     html = f"""
     <!DOCTYPE html>
@@ -134,8 +147,8 @@ def dashboard():
             
             <div style="margin: 20px 0;">
                 <div class="item"><span class="label">Status:</span><span class="value"><span class="badge">Active</span></span></div>
-                <div class="item"><span class="label">Gmail Account:</span><span class="value">{user_display}</span></div>
-                <div class="item"><span class="label">App Password:</span><span class="value">{auth_status}</span></div>
+                <div class="item"><span class="label">Auth Method:</span><span class="value">{auth_mode}</span></div>
+                <div class="item"><span class="label">Auth Status:</span><span class="value">{auth_status}</span></div>
                 <div class="item"><span class="label">Configured Timezone:</span><span class="value">{TIMEZONE_STR}</span></div>
                 <div class="item"><span class="label">Current Server Time:</span><span class="value">{now.strftime('%Y-%m-%d %H:%M:%S')}</span></div>
                 <div class="item"><span class="label">Scheduled Send Time:</span><span class="value">{SEND_HOUR:02d}:{SEND_MINUTE:02d} ({TIMEZONE_STR})</span></div>
@@ -154,10 +167,7 @@ def dashboard():
 
 @app.get("/health", summary="Basic Health Check")
 def health_check():
-    """
-    Standard lightweight health check endpoint for Render.
-    Always returns 200 OK to indicate the web service is alive.
-    """
+    """Lightweight health check endpoint for Render. Returns 200 OK."""
     return {
         "status": "healthy",
         "service": "gmail-draft-auto-sender",
@@ -172,11 +182,8 @@ def trigger_endpoint(
 ):
     """
     Called every minute by an external uptime monitoring service.
-    
-    1. Validates trigger secret.
-    2. Determines whether current time matches scheduled send time (or if force=true).
-    3. Prevents duplicate execution if already sent today.
-    4. Acquires concurrency lock and sends all drafts.
+    Validates trigger secret, verifies schedule window, prevents duplicate execution,
+    and sends all drafts.
     """
     result = evaluate_and_trigger(force=force)
     return JSONResponse(content=result)

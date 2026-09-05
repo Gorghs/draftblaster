@@ -1,7 +1,7 @@
 """
-Gmail Draft Sender module using Gmail App Password (IMAP + SMTP).
-Eliminates Google Cloud Console, OAuth clients, redirect URIs, and token expirations.
-Reads existing drafts from [Gmail]/Drafts via IMAP, sends them via SMTP, and removes them from drafts.
+Gmail Draft Sender module supporting DUAL AUTHENTICATION modes:
+1. Gmail App Password (IMAP + SMTP)
+2. Google OAuth 2.0 (Official Gmail API v1)
 """
 
 import time
@@ -11,27 +11,31 @@ import imaplib
 import smtplib
 from email.policy import default
 from email.utils import getaddresses
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from config import (
     EMAIL_GMAIL_USER,
-    EMAIL_GMAIL_PASSWORD
+    EMAIL_GMAIL_PASSWORD,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REFRESH_TOKEN,
+    GMAIL_SCOPE
 )
 
 logger = logging.getLogger("gmail_service")
 
 
-class GmailAuthError(Exception):
-    """Raised when authentication with Gmail fails."""
-    pass
-
+# =====================================================================
+# MODE 1: Gmail App Password (IMAP + SMTP)
+# =====================================================================
 
 def find_drafts_folder(mail: imaplib.IMAP4_SSL) -> str:
-    """
-    Identifies the drafts folder name in Gmail.
-    In English Gmail, it's typically '[Gmail]/Drafts', but this dynamically detects
-    the folder with the '\\Drafts' attribute to support any localized account.
-    """
+    """Identifies the drafts folder name in Gmail (e.g. '[Gmail]/Drafts')."""
     status, folder_list = mail.list()
     if status != "OK" or not folder_list:
         return '"[Gmail]/Drafts"'
@@ -40,7 +44,6 @@ def find_drafts_folder(mail: imaplib.IMAP4_SSL) -> str:
         try:
             line = folder_bytes.decode("utf-8", errors="ignore")
             if "\\Drafts" in line:
-                # Format: (\\HasNoChildren \\Drafts) "/" "[Gmail]/Drafts"
                 parts = line.split(' "/" ')
                 if len(parts) == 2:
                     return parts[1].strip()
@@ -50,39 +53,12 @@ def find_drafts_folder(mail: imaplib.IMAP4_SSL) -> str:
     return '"[Gmail]/Drafts"'
 
 
-def send_all_drafts(
-    user: Optional[str] = None,
-    password: Optional[str] = None,
-    delay_between_sends: float = 1.0
-) -> Dict[str, Any]:
-    """
-    Connects to Gmail via IMAP and SMTP using App Password:
-    1. Connects to imap.gmail.com:993 and opens Drafts folder.
-    2. Searches for all existing drafts.
-    3. If zero drafts, returns a clean completed response.
-    4. Connects to smtp.gmail.com:587.
-    5. Sends each draft message and removes the draft from [Gmail]/Drafts upon success.
-    6. Returns structured summary.
-    """
-    gmail_user = user or EMAIL_GMAIL_USER
-    gmail_pass = password or EMAIL_GMAIL_PASSWORD
-
-    if not gmail_user or not gmail_pass:
-        err_msg = "Missing EMAIL_GMAIL_USER or EMAIL_GMAIL_PASSWORD. Please configure them in environment variables."
-        logger.error(err_msg)
-        return {
-            "status": "failed",
-            "total_drafts": 0,
-            "sent": 0,
-            "failed": 0,
-            "errors": [{"error": err_msg}]
-        }
-
-    # Step 1: Connect to IMAP to fetch drafts
+def send_drafts_via_app_password(user: str, password: str, delay_between_sends: float = 1.0) -> Dict[str, Any]:
+    """Fetches and sends drafts using IMAP + SMTP with Gmail App Password."""
+    logger.info("Using Gmail App Password mode for user: %s", user)
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com", 993)
-        mail.login(gmail_user, gmail_pass)
-        logger.info("Successfully authenticated with Gmail IMAP for user %s", gmail_user)
+        mail.login(user, password)
     except Exception as e:
         logger.error("Failed to connect/login to Gmail IMAP: %s", e)
         return {
@@ -95,9 +71,8 @@ def send_all_drafts(
 
     try:
         drafts_folder = find_drafts_folder(mail)
-        select_status, select_data = mail.select(drafts_folder)
+        select_status, _ = mail.select(drafts_folder)
         if select_status != "OK":
-            logger.error("Could not open Gmail drafts folder %s", drafts_folder)
             mail.logout()
             return {
                 "status": "failed",
@@ -109,7 +84,6 @@ def send_all_drafts(
 
         search_status, search_data = mail.search(None, "ALL")
         if search_status != "OK" or not search_data or not search_data[0]:
-            logger.info("No drafts found in %s.", drafts_folder)
             mail.logout()
             return {
                 "status": "completed",
@@ -123,7 +97,6 @@ def send_all_drafts(
         mail_ids = search_data[0].split()
         total_drafts = len(mail_ids)
         if total_drafts == 0:
-            logger.info("No drafts found in %s.", drafts_folder)
             mail.logout()
             return {
                 "status": "completed",
@@ -136,15 +109,12 @@ def send_all_drafts(
 
         logger.info("Found %d draft(s) in %s ready to send.", total_drafts, drafts_folder)
 
-        # Step 2: Connect to SMTP to send the emails
         try:
             smtp = smtplib.SMTP("smtp.gmail.com", 587)
             smtp.ehlo()
             smtp.starttls()
-            smtp.login(gmail_user, gmail_pass)
-            logger.info("Successfully connected to Gmail SMTP.")
+            smtp.login(user, password)
         except Exception as e:
-            logger.error("Failed to connect/login to Gmail SMTP: %s", e)
             mail.logout()
             return {
                 "status": "failed",
@@ -165,40 +135,32 @@ def send_all_drafts(
                     fetch_status, msg_data = mail.fetch(mail_id, "(RFC822)")
                     if fetch_status != "OK" or not msg_data or not msg_data[0]:
                         failed_count += 1
-                        errors.append({"draft_id": msg_id_str, "error": "Failed to fetch draft data via IMAP"})
+                        errors.append({"draft_id": msg_id_str, "error": "Failed to fetch draft data"})
                         continue
 
                     raw_bytes = msg_data[0][1]
                     msg = email.message_from_bytes(raw_bytes, policy=default)
 
-                    # Extract recipients from To, Cc, Bcc
                     subject = str(msg.get("Subject", "(No Subject)"))
                     recipients = []
                     for header_name in ["To", "Cc", "Bcc"]:
                         val = msg.get(header_name)
                         if val:
-                            parsed_addresses = getaddresses([str(val)])
-                            for name, addr in parsed_addresses:
+                            parsed = getaddresses([str(val)])
+                            for _, addr in parsed:
                                 if addr and addr not in recipients:
                                     recipients.append(addr)
 
                     if not recipients:
-                        logger.warning("[%d/%d] Draft ID %s has no recipient addresses. Skipping.", idx, total_drafts, msg_id_str)
                         failed_count += 1
-                        errors.append({"draft_id": msg_id_str, "error": "No recipients specified in draft"})
+                        errors.append({"draft_id": msg_id_str, "error": "No recipient addresses found"})
                         continue
 
-                    logger.info(
-                        "[%d/%d] Sending Draft ID: %s | To: %s | Subject: %s",
-                        idx, total_drafts, msg_id_str, ", ".join(recipients), subject
-                    )
-
-                    # Send via SMTP
+                    logger.info("[%d/%d] Sending Draft %s | To: %s | Subject: %s", idx, total_drafts, msg_id_str, ", ".join(recipients), subject)
                     smtp.send_message(msg)
                     sent_count += 1
-                    logger.info("Successfully sent Draft ID %s", msg_id_str)
 
-                    # Mark draft as deleted in IMAP so it doesn't stay in Drafts
+                    # Remove draft from Drafts folder
                     mail.store(mail_id, "+FLAGS", "\\Deleted")
 
                     if delay_between_sends > 0:
@@ -209,9 +171,7 @@ def send_all_drafts(
                     logger.error("Error sending draft %s: %s", msg_id_str, err)
                     errors.append({"draft_id": msg_id_str, "error": str(err)})
 
-            # Expunge deleted drafts from IMAP
             mail.expunge()
-
         finally:
             try:
                 smtp.quit()
@@ -220,13 +180,9 @@ def send_all_drafts(
 
         mail.logout()
 
-        logger.info(
-            "Draft send batch finished: %d total, %d sent, %d failed.",
-            total_drafts, sent_count, failed_count
-        )
-
         return {
             "status": "completed" if failed_count == 0 else "partial_success",
+            "auth_method": "app_password",
             "total_drafts": total_drafts,
             "sent": sent_count,
             "failed": failed_count,
@@ -234,7 +190,7 @@ def send_all_drafts(
         }
 
     except Exception as e:
-        logger.error("Unexpected error during draft processing: %s", e)
+        logger.error("Unexpected error in App Password mode: %s", e)
         try:
             mail.logout()
         except Exception:
@@ -246,3 +202,138 @@ def send_all_drafts(
             "failed": 0,
             "errors": [{"error": str(e)}]
         }
+
+
+# =====================================================================
+# MODE 2: Google OAuth 2.0 (Official Gmail API v1)
+# =====================================================================
+
+def send_drafts_via_oauth(
+    client_id: str,
+    client_secret: str,
+    refresh_token: str,
+    delay_between_sends: float = 1.0
+) -> Dict[str, Any]:
+    """Fetches and sends drafts using official Gmail API v1 with OAuth 2.0 refresh token."""
+    logger.info("Using official Google OAuth 2.0 mode.")
+    try:
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=[GMAIL_SCOPE]
+        )
+        creds.refresh(Request())
+        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+    except Exception as e:
+        logger.error("OAuth authentication failed: %s", e)
+        return {
+            "status": "failed",
+            "total_drafts": 0,
+            "sent": 0,
+            "failed": 0,
+            "errors": [{"error": f"OAuth initialization error: {e}"}]
+        }
+
+    all_drafts = []
+    page_token = None
+    try:
+        while True:
+            resp = service.users().drafts().list(userId="me", pageToken=page_token).execute()
+            drafts = resp.get("drafts", [])
+            all_drafts.extend(drafts)
+            page_token = resp.get("nextPageToken")
+            if not page_token:
+                break
+    except Exception as e:
+        logger.error("Error querying drafts via Gmail API: %s", e)
+        return {
+            "status": "failed",
+            "total_drafts": 0,
+            "sent": 0,
+            "failed": 0,
+            "errors": [{"error": str(e)}]
+        }
+
+    total_count = len(all_drafts)
+    if total_count == 0:
+        return {
+            "status": "completed",
+            "auth_method": "oauth2",
+            "total_drafts": 0,
+            "sent": 0,
+            "failed": 0,
+            "message": "No drafts found in Gmail account.",
+            "errors": []
+        }
+
+    sent_count = 0
+    failed_count = 0
+    errors = []
+
+    for idx, draft in enumerate(all_drafts, start=1):
+        draft_id = draft.get("id")
+        if not draft_id:
+            continue
+        try:
+            logger.info("[%d/%d] Sending Draft ID: %s via Gmail API", idx, total_count, draft_id)
+            service.users().drafts().send(userId="me", body={"id": draft_id}).execute()
+            sent_count += 1
+            if delay_between_sends > 0:
+                time.sleep(delay_between_sends)
+        except Exception as err:
+            failed_count += 1
+            logger.error("Error sending draft %s: %s", draft_id, err)
+            errors.append({"draft_id": draft_id, "error": str(err)})
+
+    return {
+        "status": "completed" if failed_count == 0 else "partial_success",
+        "auth_method": "oauth2",
+        "total_drafts": total_count,
+        "sent": sent_count,
+        "failed": failed_count,
+        "errors": errors
+    }
+
+
+# =====================================================================
+# Main Unified Dispatcher
+# =====================================================================
+
+def send_all_drafts(
+    user: Optional[str] = None,
+    password: Optional[str] = None,
+    delay_between_sends: float = 1.0
+) -> Dict[str, Any]:
+    """
+    Unified entrypoint: Automatically detects whether to use App Password
+    or Google OAuth based on available environment credentials.
+    """
+    u = user or EMAIL_GMAIL_USER
+    p = password or EMAIL_GMAIL_PASSWORD
+
+    # 1. Prefer App Password if provided
+    if u and p:
+        return send_drafts_via_app_password(u, p, delay_between_sends=delay_between_sends)
+
+    # 2. Otherwise fallback to OAuth 2.0 if configured
+    if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN:
+        return send_drafts_via_oauth(
+            GOOGLE_CLIENT_ID,
+            GOOGLE_CLIENT_SECRET,
+            GOOGLE_REFRESH_TOKEN,
+            delay_between_sends=delay_between_sends
+        )
+
+    # 3. Neither configured
+    err = "No authentication configured. Provide either (EMAIL_GMAIL_USER + EMAIL_GMAIL_PASSWORD) or Google OAuth (GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + GOOGLE_REFRESH_TOKEN)."
+    logger.error(err)
+    return {
+        "status": "failed",
+        "total_drafts": 0,
+        "sent": 0,
+        "failed": 0,
+        "errors": [{"error": err}]
+    }
