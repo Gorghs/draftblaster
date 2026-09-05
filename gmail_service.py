@@ -311,8 +311,8 @@ def send_all_drafts(
     Unified entrypoint: Automatically detects whether to use App Password
     or Google OAuth based on available environment credentials.
     """
-    u = user or EMAIL_GMAIL_USER
-    p = password or EMAIL_GMAIL_PASSWORD
+    u = EMAIL_GMAIL_USER if user is None else user
+    p = EMAIL_GMAIL_PASSWORD if password is None else password
 
     # 1. Prefer App Password if provided
     if u and p:
