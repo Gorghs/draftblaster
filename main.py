@@ -1,6 +1,6 @@
 """
 FastAPI application entrypoint for Gmail Draft Auto-Sender.
-Provides /health, /trigger, dashboard, and OAuth routes for Render deployment.
+Provides /health, /trigger, and dashboard for Render deployment using Gmail App Password.
 """
 
 import os
@@ -18,10 +18,9 @@ from config import (
     SEND_HOUR,
     SEND_MINUTE,
     TRIGGER_SECRET,
-    GOOGLE_CLIENT_ID,
-    GOOGLE_REFRESH_TOKEN
+    EMAIL_GMAIL_USER,
+    EMAIL_GMAIL_PASSWORD
 )
-from oauth_routes import router as oauth_router
 from scheduler import evaluate_and_trigger, get_current_localized_time
 from state_store import get_state_store
 
@@ -40,12 +39,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Gmail Draft Auto-Sender Service...")
     logger.info("Timezone: %s | Daily Target: %02d:%02d", TIMEZONE_STR, SEND_HOUR, SEND_MINUTE)
     
-    if not GOOGLE_CLIENT_ID:
-        logger.warning("GOOGLE_CLIENT_ID is not configured. OAuth setup will be required.")
-    if not GOOGLE_REFRESH_TOKEN:
-        logger.warning("GOOGLE_REFRESH_TOKEN is not set. Run /auth/login to generate one.")
+    if not EMAIL_GMAIL_USER:
+        logger.warning("EMAIL_GMAIL_USER is not set in environment variables.")
+    if not EMAIL_GMAIL_PASSWORD:
+        logger.warning("EMAIL_GMAIL_PASSWORD is not set in environment variables.")
     else:
-        logger.info("Google OAuth Refresh Token is present. Unattended automation ready.")
+        logger.info("Gmail App Password configured for user: %s. Automation ready.", EMAIL_GMAIL_USER)
 
     yield
     logger.info("Shutting down Gmail Draft Auto-Sender Service...")
@@ -53,13 +52,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Gmail Draft Auto-Sender",
-    description="Automates sending all Gmail drafts at a configured daily time via official Gmail API v1.",
-    version="2.0.0",
+    description="Automates sending all Gmail drafts at a configured daily time using Gmail App Password.",
+    version="2.1.0",
     lifespan=lifespan
 )
-
-# Mount OAuth routes (/auth/login, /auth/callback)
-app.include_router(oauth_router)
 
 
 def verify_trigger_secret(
@@ -69,18 +65,14 @@ def verify_trigger_secret(
 ) -> bool:
     """Validates trigger secret from query parameter or headers."""
     if not TRIGGER_SECRET:
-        # If no secret is configured, allow open trigger (useful for simple dev/health setups)
         return True
 
-    # Check query param ?secret=...
     if secret_param and secret_param == TRIGGER_SECRET:
         return True
 
-    # Check header x-trigger-secret
     if secret_header and secret_header == TRIGGER_SECRET:
         return True
 
-    # Check Authorization: Bearer <secret>
     if authorization:
         parts = authorization.split()
         if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1] == TRIGGER_SECRET:
@@ -99,8 +91,8 @@ def dashboard():
     store = get_state_store()
     last_run = store.get_last_run_info()
 
-    auth_status = "✅ Configured (Ready)" if GOOGLE_REFRESH_TOKEN else "⚠️ Missing Refresh Token"
-    auth_action = "" if GOOGLE_REFRESH_TOKEN else '<p><a href="/auth/login" style="display:inline-block;padding:8px 16px;background:#0284c7;color:white;text-decoration:none;border-radius:6px;font-weight:bold;">👉 Complete One-Time Google Authorization</a></p>'
+    auth_status = "✅ Configured (Ready)" if (EMAIL_GMAIL_USER and EMAIL_GMAIL_PASSWORD) else "⚠️ Missing EMAIL_GMAIL_USER / EMAIL_GMAIL_PASSWORD"
+    user_display = EMAIL_GMAIL_USER if EMAIL_GMAIL_USER else "Not configured"
 
     html = f"""
     <!DOCTYPE html>
@@ -132,7 +124,7 @@ def dashboard():
             .item:last-child {{ border-bottom: none; }}
             .label {{ color: #94a3b8; font-weight: 500; }}
             .value {{ font-family: monospace; color: #f1f5f9; }}
-            .badge {{ background: #0369a1; color: #e0f2fe; padding: 2px 8px; border-radius: 4px; font-size: 12px; }}
+            .badge {{ background: #166534; color: #bbf7d0; padding: 2px 8px; border-radius: 4px; font-size: 12px; }}
         </style>
     </head>
     <body>
@@ -141,18 +133,17 @@ def dashboard():
             <p style="color: #cbd5e1; font-size: 14px;">Automated background service on Render triggered every minute by external uptime ping.</p>
             
             <div style="margin: 20px 0;">
-                <div class="item"><span class="label">Status:</span><span class="value"><span class="badge">Running</span></span></div>
+                <div class="item"><span class="label">Status:</span><span class="value"><span class="badge">Active</span></span></div>
+                <div class="item"><span class="label">Gmail Account:</span><span class="value">{user_display}</span></div>
+                <div class="item"><span class="label">App Password:</span><span class="value">{auth_status}</span></div>
                 <div class="item"><span class="label">Configured Timezone:</span><span class="value">{TIMEZONE_STR}</span></div>
                 <div class="item"><span class="label">Current Server Time:</span><span class="value">{now.strftime('%Y-%m-%d %H:%M:%S')}</span></div>
                 <div class="item"><span class="label">Scheduled Send Time:</span><span class="value">{SEND_HOUR:02d}:{SEND_MINUTE:02d} ({TIMEZONE_STR})</span></div>
-                <div class="item"><span class="label">Google OAuth:</span><span class="value">{auth_status}</span></div>
                 <div class="item"><span class="label">Last Executed Date:</span><span class="value">{last_run.get('last_send_date') or 'None recorded'}</span></div>
             </div>
 
-            {auth_action}
-
             <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #334155; font-size: 12px; color: #64748b;">
-                Endpoint: <code>GET /trigger?secret=YOUR_SECRET</code> (Call every 1 minute)
+                Endpoint: <code>GET /trigger?secret=YOUR_SECRET</code> (Ping every 1 minute)
             </div>
         </div>
     </body>

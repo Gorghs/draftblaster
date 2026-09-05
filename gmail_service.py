@@ -1,214 +1,248 @@
 """
-Gmail service module for authenticating via OAuth 2.0 refresh token
-and sending all available Gmail drafts with pagination, error resilience, and structured reporting.
+Gmail Draft Sender module using Gmail App Password (IMAP + SMTP).
+Eliminates Google Cloud Console, OAuth clients, redirect URIs, and token expirations.
+Reads existing drafts from [Gmail]/Drafts via IMAP, sends them via SMTP, and removes them from drafts.
 """
 
 import time
+import email
 import logging
-from typing import Dict, Any, List, Optional
-
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build, Resource
-from googleapiclient.errors import HttpError
+import imaplib
+import smtplib
+from email.policy import default
+from email.utils import getaddresses
+from typing import Dict, Any, List, Optional, Tuple
 
 from config import (
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET,
-    GOOGLE_REFRESH_TOKEN,
-    GMAIL_SCOPE
+    EMAIL_GMAIL_USER,
+    EMAIL_GMAIL_PASSWORD
 )
 
 logger = logging.getLogger("gmail_service")
 
 
-class GmailServiceError(Exception):
-    """Base exception for Gmail service errors."""
+class GmailAuthError(Exception):
+    """Raised when authentication with Gmail fails."""
     pass
 
 
-class MissingCredentialsError(GmailServiceError):
-    """Raised when required Google OAuth credentials are not configured."""
-    pass
-
-
-def get_gmail_client(
-    client_id: Optional[str] = None,
-    client_secret: Optional[str] = None,
-    refresh_token: Optional[str] = None
-) -> Resource:
+def find_drafts_folder(mail: imaplib.IMAP4_SSL) -> str:
     """
-    Constructs an authenticated Gmail API v1 service instance using the OAuth refresh token.
-    Works unattended without requiring persistent token files or repeated user logins.
+    Identifies the drafts folder name in Gmail.
+    In English Gmail, it's typically '[Gmail]/Drafts', but this dynamically detects
+    the folder with the '\\Drafts' attribute to support any localized account.
     """
-    cid = client_id or GOOGLE_CLIENT_ID
-    csec = client_secret or GOOGLE_CLIENT_SECRET
-    rtoken = refresh_token or GOOGLE_REFRESH_TOKEN
+    status, folder_list = mail.list()
+    if status != "OK" or not folder_list:
+        return '"[Gmail]/Drafts"'
 
-    if not cid or not csec or not rtoken:
-        missing = []
-        if not cid:
-            missing.append("GOOGLE_CLIENT_ID")
-        if not csec:
-            missing.append("GOOGLE_CLIENT_SECRET")
-        if not rtoken:
-            missing.append("GOOGLE_REFRESH_TOKEN")
-        error_msg = f"Missing required Google OAuth credentials in environment: {', '.join(missing)}"
-        logger.error(error_msg)
-        raise MissingCredentialsError(error_msg)
+    for folder_bytes in folder_list:
+        try:
+            line = folder_bytes.decode("utf-8", errors="ignore")
+            if "\\Drafts" in line:
+                # Format: (\\HasNoChildren \\Drafts) "/" "[Gmail]/Drafts"
+                parts = line.split(' "/" ')
+                if len(parts) == 2:
+                    return parts[1].strip()
+        except Exception:
+            continue
 
-    try:
-        # Construct credentials directly from refresh token
-        creds = Credentials(
-            token=None,
-            refresh_token=rtoken,
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=cid,
-            client_secret=csec,
-            scopes=[GMAIL_SCOPE]
-        )
-
-        # Refresh immediately to test validity and obtain fresh access token
-        creds.refresh(Request())
-        logger.info("Successfully refreshed Google OAuth access token using refresh token.")
-
-        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-        return service
-    except Exception as e:
-        logger.error("Failed to authenticate with Gmail API via refresh token: %s", e)
-        raise GmailServiceError(f"OAuth authentication failed: {e}") from e
-
-
-def get_draft_metadata(service: Resource, draft_id: str) -> Dict[str, str]:
-    """Retrieves basic metadata (Subject, To) for a draft for logging purposes."""
-    try:
-        draft = service.users().drafts().get(userId="me", id=draft_id, format="metadata").execute()
-        headers = draft.get("message", {}).get("payload", {}).get("headers", [])
-        subject = next((h["value"] for h in headers if h["name"].lower() == "subject"), "(No Subject)")
-        to_addr = next((h["value"] for h in headers if h["name"].lower() == "to"), "(No Recipient)")
-        return {"subject": subject, "to": to_addr}
-    except Exception:
-        return {"subject": "(Draft)", "to": "(Recipient)"}
+    return '"[Gmail]/Drafts"'
 
 
 def send_all_drafts(
-    service: Optional[Resource] = None,
+    user: Optional[str] = None,
+    password: Optional[str] = None,
     delay_between_sends: float = 1.0
 ) -> Dict[str, Any]:
     """
-    Retrieves and sends ALL existing Gmail drafts.
-    
-    1. Authenticates using OAuth refresh token (if service is not pre-injected).
-    2. Handles pagination to retrieve all drafts across all pages.
-    3. If zero drafts, returns a clean success response.
-    4. Iterates through all drafts and sends them via users().drafts().send().
-    5. Recovers from individual draft failures and continues sending remaining drafts.
-    6. Returns a structured execution summary.
+    Connects to Gmail via IMAP and SMTP using App Password:
+    1. Connects to imap.gmail.com:993 and opens Drafts folder.
+    2. Searches for all existing drafts.
+    3. If zero drafts, returns a clean completed response.
+    4. Connects to smtp.gmail.com:587.
+    5. Sends each draft message and removes the draft from [Gmail]/Drafts upon success.
+    6. Returns structured summary.
     """
-    if service is None:
-        service = get_gmail_client()
+    gmail_user = user or EMAIL_GMAIL_USER
+    gmail_pass = password or EMAIL_GMAIL_PASSWORD
 
-    logger.info("Querying all drafts from Gmail account...")
-    all_drafts: List[Dict[str, Any]] = []
-    page_token: Optional[str] = None
+    if not gmail_user or not gmail_pass:
+        err_msg = "Missing EMAIL_GMAIL_USER or EMAIL_GMAIL_PASSWORD. Please configure them in environment variables."
+        logger.error(err_msg)
+        return {
+            "status": "failed",
+            "total_drafts": 0,
+            "sent": 0,
+            "failed": 0,
+            "errors": [{"error": err_msg}]
+        }
+
+    # Step 1: Connect to IMAP to fetch drafts
+    try:
+        mail = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+        mail.login(gmail_user, gmail_pass)
+        logger.info("Successfully authenticated with Gmail IMAP for user %s", gmail_user)
+    except Exception as e:
+        logger.error("Failed to connect/login to Gmail IMAP: %s", e)
+        return {
+            "status": "failed",
+            "total_drafts": 0,
+            "sent": 0,
+            "failed": 0,
+            "errors": [{"error": f"IMAP authentication error: {e}"}]
+        }
 
     try:
-        # Step 1: Paginate and collect all draft IDs
-        while True:
-            response = service.users().drafts().list(
-                userId="me",
-                pageToken=page_token
-            ).execute()
+        drafts_folder = find_drafts_folder(mail)
+        select_status, select_data = mail.select(drafts_folder)
+        if select_status != "OK":
+            logger.error("Could not open Gmail drafts folder %s", drafts_folder)
+            mail.logout()
+            return {
+                "status": "failed",
+                "total_drafts": 0,
+                "sent": 0,
+                "failed": 0,
+                "errors": [{"error": f"Failed to select drafts folder: {drafts_folder}"}]
+            }
 
-            drafts = response.get("drafts", [])
-            all_drafts.extend(drafts)
+        search_status, search_data = mail.search(None, "ALL")
+        if search_status != "OK" or not search_data or not search_data[0]:
+            logger.info("No drafts found in %s.", drafts_folder)
+            mail.logout()
+            return {
+                "status": "completed",
+                "total_drafts": 0,
+                "sent": 0,
+                "failed": 0,
+                "message": "No drafts found in Gmail account.",
+                "errors": []
+            }
 
-            page_token = response.get("nextPageToken")
-            if not page_token:
-                break
+        mail_ids = search_data[0].split()
+        total_drafts = len(mail_ids)
+        if total_drafts == 0:
+            logger.info("No drafts found in %s.", drafts_folder)
+            mail.logout()
+            return {
+                "status": "completed",
+                "total_drafts": 0,
+                "sent": 0,
+                "failed": 0,
+                "message": "No drafts found in Gmail account.",
+                "errors": []
+            }
 
-    except HttpError as http_err:
-        logger.error("Gmail API HTTP error listing drafts: %s", http_err)
-        return {
-            "status": "failed",
-            "total_drafts": 0,
-            "sent": 0,
-            "failed": 0,
-            "errors": [{"error": f"Gmail API list error: {http_err}"}]
-        }
-    except Exception as err:
-        logger.error("Unexpected error querying drafts: %s", err)
-        return {
-            "status": "failed",
-            "total_drafts": 0,
-            "sent": 0,
-            "failed": 0,
-            "errors": [{"error": str(err)}]
-        }
+        logger.info("Found %d draft(s) in %s ready to send.", total_drafts, drafts_folder)
 
-    total_count = len(all_drafts)
-    if total_count == 0:
-        logger.info("No drafts found in Gmail account. Nothing to send.")
-        return {
-            "status": "completed",
-            "total_drafts": 0,
-            "sent": 0,
-            "failed": 0,
-            "message": "No drafts found in Gmail account.",
-            "errors": []
-        }
+        # Step 2: Connect to SMTP to send the emails
+        try:
+            smtp = smtplib.SMTP("smtp.gmail.com", 587)
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(gmail_user, gmail_pass)
+            logger.info("Successfully connected to Gmail SMTP.")
+        except Exception as e:
+            logger.error("Failed to connect/login to Gmail SMTP: %s", e)
+            mail.logout()
+            return {
+                "status": "failed",
+                "total_drafts": total_drafts,
+                "sent": 0,
+                "failed": total_drafts,
+                "errors": [{"error": f"SMTP connection error: {e}"}]
+            }
 
-    logger.info("Found %d draft(s) ready to send.", total_count)
-    sent_count = 0
-    failed_count = 0
-    errors: List[Dict[str, Any]] = []
-
-    # Step 2: Iterate and send each draft
-    for idx, draft in enumerate(all_drafts, start=1):
-        draft_id = draft.get("id")
-        if not draft_id:
-            continue
-
-        meta = get_draft_metadata(service, draft_id)
-        logger.info(
-            "[%d/%d] Sending Draft ID: %s | To: %s | Subject: %s",
-            idx, total_count, draft_id, meta["to"], meta["subject"]
-        )
+        sent_count = 0
+        failed_count = 0
+        errors: List[Dict[str, Any]] = []
 
         try:
-            # Send draft via Gmail API
-            service.users().drafts().send(
-                userId="me",
-                body={"id": draft_id}
-            ).execute()
+            for idx, mail_id in enumerate(mail_ids, start=1):
+                msg_id_str = mail_id.decode("utf-8", errors="ignore")
+                try:
+                    fetch_status, msg_data = mail.fetch(mail_id, "(RFC822)")
+                    if fetch_status != "OK" or not msg_data or not msg_data[0]:
+                        failed_count += 1
+                        errors.append({"draft_id": msg_id_str, "error": "Failed to fetch draft data via IMAP"})
+                        continue
 
-            sent_count += 1
-            logger.info("Successfully sent Draft ID %s", draft_id)
+                    raw_bytes = msg_data[0][1]
+                    msg = email.message_from_bytes(raw_bytes, policy=default)
 
-            # Safety pacing delay between sends
-            if delay_between_sends > 0:
-                time.sleep(delay_between_sends)
+                    # Extract recipients from To, Cc, Bcc
+                    subject = str(msg.get("Subject", "(No Subject)"))
+                    recipients = []
+                    for header_name in ["To", "Cc", "Bcc"]:
+                        val = msg.get(header_name)
+                        if val:
+                            parsed_addresses = getaddresses([str(val)])
+                            for name, addr in parsed_addresses:
+                                if addr and addr not in recipients:
+                                    recipients.append(addr)
 
-        except HttpError as http_err:
-            failed_count += 1
-            err_msg = f"HTTP {http_err.resp.status}: {http_err.error_details if hasattr(http_err, 'error_details') else str(http_err)}"
-            logger.error("Failed to send draft %s: %s", draft_id, err_msg)
-            errors.append({"draft_id": draft_id, "error": err_msg})
+                    if not recipients:
+                        logger.warning("[%d/%d] Draft ID %s has no recipient addresses. Skipping.", idx, total_drafts, msg_id_str)
+                        failed_count += 1
+                        errors.append({"draft_id": msg_id_str, "error": "No recipients specified in draft"})
+                        continue
 
-        except Exception as err:
-            failed_count += 1
-            logger.error("Unexpected error sending draft %s: %s", draft_id, err)
-            errors.append({"draft_id": draft_id, "error": str(err)})
+                    logger.info(
+                        "[%d/%d] Sending Draft ID: %s | To: %s | Subject: %s",
+                        idx, total_drafts, msg_id_str, ", ".join(recipients), subject
+                    )
 
-    logger.info(
-        "Finished draft execution: %d total, %d sent, %d failed.",
-        total_count, sent_count, failed_count
-    )
+                    # Send via SMTP
+                    smtp.send_message(msg)
+                    sent_count += 1
+                    logger.info("Successfully sent Draft ID %s", msg_id_str)
 
-    return {
-        "status": "completed" if failed_count == 0 else "partial_success",
-        "total_drafts": total_count,
-        "sent": sent_count,
-        "failed": failed_count,
-        "errors": errors
-    }
+                    # Mark draft as deleted in IMAP so it doesn't stay in Drafts
+                    mail.store(mail_id, "+FLAGS", "\\Deleted")
+
+                    if delay_between_sends > 0:
+                        time.sleep(delay_between_sends)
+
+                except Exception as err:
+                    failed_count += 1
+                    logger.error("Error sending draft %s: %s", msg_id_str, err)
+                    errors.append({"draft_id": msg_id_str, "error": str(err)})
+
+            # Expunge deleted drafts from IMAP
+            mail.expunge()
+
+        finally:
+            try:
+                smtp.quit()
+            except Exception:
+                pass
+
+        mail.logout()
+
+        logger.info(
+            "Draft send batch finished: %d total, %d sent, %d failed.",
+            total_drafts, sent_count, failed_count
+        )
+
+        return {
+            "status": "completed" if failed_count == 0 else "partial_success",
+            "total_drafts": total_drafts,
+            "sent": sent_count,
+            "failed": failed_count,
+            "errors": errors
+        }
+
+    except Exception as e:
+        logger.error("Unexpected error during draft processing: %s", e)
+        try:
+            mail.logout()
+        except Exception:
+            pass
+        return {
+            "status": "failed",
+            "total_drafts": 0,
+            "sent": 0,
+            "failed": 0,
+            "errors": [{"error": str(e)}]
+        }

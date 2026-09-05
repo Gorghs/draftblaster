@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from main import app
-from gmail_service import MissingCredentialsError, get_gmail_client
+from gmail_service import send_all_drafts
 
 client = TestClient(app)
 
@@ -57,10 +57,10 @@ def test_trigger_secret_validation():
 
 
 def test_missing_environment_variables():
-    """Test 9: Missing environment variables error handling."""
-    with patch("gmail_service.GOOGLE_CLIENT_ID", ""), \
-         patch("gmail_service.GOOGLE_CLIENT_SECRET", ""), \
-         patch("gmail_service.GOOGLE_REFRESH_TOKEN", ""):
-        with pytest.raises(MissingCredentialsError) as exc_info:
-            get_gmail_client()
-        assert "Missing required Google OAuth credentials" in str(exc_info.value)
+    """Test: Missing environment variables error handling."""
+    with patch("gmail_service.EMAIL_GMAIL_USER", ""), \
+         patch("gmail_service.EMAIL_GMAIL_PASSWORD", ""):
+        result = send_all_drafts(user="", password="")
+        assert result["status"] == "failed"
+        assert "Missing EMAIL_GMAIL_USER or EMAIL_GMAIL_PASSWORD" in result["errors"][0]["error"]
+
