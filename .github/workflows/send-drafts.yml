@@ -1,0 +1,60 @@
+name: Daily Gmail Draft Auto-Sender
+
+on:
+  schedule:
+    # --------------------------------------------------------------------------
+    # SCHEDULE EXPLANATION (CRON RUNS IN UTC):
+    # Target Local Time : 12:00 PM (Noon) Asia/Kolkata (IST)
+    # Timezone Offset   : Asia/Kolkata is UTC + 5:30
+    # UTC Calculation   : 12:00 - 05:30 = 06:30 UTC
+    # Format: minute hour day-of-month month day-of-week
+    # --------------------------------------------------------------------------
+    - cron: '30 6 * * *'
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in DRY-RUN mode (inspect drafts without sending or deleting)'
+        required: false
+        default: false
+        type: boolean
+
+# Prevent concurrent runs from processing the same Gmail mailbox simultaneously
+concurrency:
+  group: send-drafts
+  cancel-in-progress: false
+
+jobs:
+  send-drafts:
+    name: Fetch & Send Gmail Drafts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute Draftblaster
+        env:
+          EMAIL_GMAIL_USER: ${{ secrets.EMAIL_GMAIL_USER }}
+          EMAIL_GMAIL_PASSWORD: ${{ secrets.EMAIL_GMAIL_PASSWORD }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            echo "::notice::Running in DRY-RUN mode as requested by manual trigger."
+            python send_drafts.py --dry-run
+          else
+            echo "::notice::Running in LIVE mode."
+            python send_drafts.py
+          fi

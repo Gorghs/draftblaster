@@ -4,6 +4,7 @@ Gmail Draft Sender module supporting DUAL AUTHENTICATION modes:
 2. Google OAuth 2.0 (Official Gmail API v1)
 """
 
+import os
 import time
 import email
 import logging
@@ -53,9 +54,16 @@ def find_drafts_folder(mail: imaplib.IMAP4_SSL) -> str:
     return '"[Gmail]/Drafts"'
 
 
-def send_drafts_via_app_password(user: str, password: str, delay_between_sends: float = 1.0) -> Dict[str, Any]:
+def send_drafts_via_app_password(
+    user: str,
+    password: str,
+    delay_between_sends: float = 1.0,
+    dry_run: bool = False
+) -> Dict[str, Any]:
     """Fetches and sends drafts using IMAP + SMTP with Gmail App Password."""
-    logger.info("Using Gmail App Password mode for user: %s", user)
+    # Mask username for privacy/security
+    masked_user = user[:2] + "***@" + user.split("@")[1] if "@" in user and len(user.split("@")[0]) > 2 else "***"
+    logger.info("Connecting to Gmail IMAP for account: %s (dry_run=%s)", masked_user, dry_run)
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com", 993)
         mail.login(user, password)
@@ -107,7 +115,38 @@ def send_drafts_via_app_password(user: str, password: str, delay_between_sends: 
                 "errors": []
             }
 
-        logger.info("Found %d draft(s) in %s ready to send.", total_drafts, drafts_folder)
+        logger.info("Found %d draft(s) in %s ready to process.", total_drafts, drafts_folder)
+
+        if dry_run:
+            logger.info("DRY-RUN mode active: inspecting draft metadata without sending or deleting.")
+            for idx, mail_id in enumerate(mail_ids, start=1):
+                msg_id_str = mail_id.decode("utf-8", errors="ignore")
+                fetch_status, msg_data = mail.fetch(mail_id, "(RFC822)")
+                if fetch_status == "OK" and msg_data and msg_data[0]:
+                    raw_bytes = msg_data[0][1]
+                    msg = email.message_from_bytes(raw_bytes, policy=default)
+                    subject = str(msg.get("Subject", "(No Subject)"))
+                    recipients = []
+                    for header_name in ["To", "Cc", "Bcc"]:
+                        val = msg.get(header_name)
+                        if val:
+                            parsed = getaddresses([str(val)])
+                            for _, addr in parsed:
+                                if addr and addr not in recipients:
+                                    recipients.append(addr)
+                    logger.info("[DRY-RUN] [%d/%d] Draft ID %s | To: %s | Subject: %s", idx, total_drafts, msg_id_str, ", ".join(recipients) if recipients else "(No recipients)", subject)
+
+            mail.logout()
+            return {
+                "status": "completed",
+                "auth_method": "app_password",
+                "dry_run": True,
+                "total_drafts": total_drafts,
+                "sent": 0,
+                "failed": 0,
+                "message": f"Dry-run completed successfully. {total_drafts} draft(s) inspected, 0 sent, 0 deleted.",
+                "errors": []
+            }
 
         try:
             smtp = smtplib.SMTP("smtp.gmail.com", 587, timeout=15)
@@ -309,7 +348,8 @@ def send_drafts_via_oauth(
 def send_all_drafts(
     user: Optional[str] = None,
     password: Optional[str] = None,
-    delay_between_sends: float = 1.0
+    delay_between_sends: float = 1.0,
+    dry_run: bool = False
 ) -> Dict[str, Any]:
     """
     Unified entrypoint: Automatically detects whether to use App Password
@@ -320,7 +360,7 @@ def send_all_drafts(
 
     # 1. Prefer App Password if provided
     if u and p:
-        return send_drafts_via_app_password(u, p, delay_between_sends=delay_between_sends)
+        return send_drafts_via_app_password(u, p, delay_between_sends=delay_between_sends, dry_run=dry_run)
 
     # 2. Otherwise fallback to OAuth 2.0 if configured
     if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN:
@@ -332,7 +372,7 @@ def send_all_drafts(
         )
 
     # 3. Neither configured
-    err = "No authentication configured. Provide either (EMAIL_GMAIL_USER + EMAIL_GMAIL_PASSWORD) or Google OAuth (GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + GOOGLE_REFRESH_TOKEN)."
+    err = "No authentication configured. Provide EMAIL_GMAIL_USER and EMAIL_GMAIL_PASSWORD."
     logger.error(err)
     return {
         "status": "failed",

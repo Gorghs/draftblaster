@@ -19,3 +19,5 @@ state.json
 state.json.*
 .pytest_cache/
 draftblaster.xpi
+client_secret*.json
+*.lock
