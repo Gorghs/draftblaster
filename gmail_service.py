@@ -110,18 +110,22 @@ def send_drafts_via_app_password(user: str, password: str, delay_between_sends: 
         logger.info("Found %d draft(s) in %s ready to send.", total_drafts, drafts_folder)
 
         try:
-            smtp = smtplib.SMTP("smtp.gmail.com", 587)
+            smtp = smtplib.SMTP("smtp.gmail.com", 587, timeout=15)
             smtp.ehlo()
             smtp.starttls()
             smtp.login(user, password)
         except Exception as e:
+            err_str = str(e)
+            if "timed out" in err_str.lower() or "timeout" in err_str.lower() or "110" in err_str:
+                err_str = f"SMTP connection timed out ({e}). On Render Free Tier, outbound SMTP ports (25, 465, 587) are blocked. Use Google OAuth (HTTPS port 443) or upgrade to Render Starter."
+            logger.error("SMTP connection error: %s", err_str)
             mail.logout()
             return {
                 "status": "failed",
                 "total_drafts": total_drafts,
                 "sent": 0,
                 "failed": total_drafts,
-                "errors": [{"error": f"SMTP connection error: {e}"}]
+                "errors": [{"error": f"SMTP connection error: {err_str}"}]
             }
 
         sent_count = 0

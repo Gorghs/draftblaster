@@ -759,17 +759,24 @@ def dashboard():
                     const total = data.results?.total_drafts || 0;
                     const sent = data.results?.sent || 0;
                     const failed = data.results?.failed || 0;
-                    banner.className = 'mc-banner success';
-                    banner.innerText = `[SUCCESS] Batch Complete! Sent: ${{sent}} / ${{total}} draft(s). Failed: ${{failed}}.`;
-                    if (data.date) {{
-                        document.getElementById('lastExecDate').innerText = data.date;
+                    if (failed > 0 && sent === 0) {{
+                        const errMsg = data.results?.errors?.[0]?.error || 'Draft sending failed.';
+                        banner.className = 'mc-banner error';
+                        banner.innerText = `[FAILED] Sent: ${{sent}}/${{total}}. ${{errMsg}}`;
+                    }} else {{
+                        banner.className = 'mc-banner success';
+                        banner.innerText = `[SUCCESS] Batch Complete! Sent: ${{sent}} / ${{total}} draft(s). Failed: ${{failed}}.`;
+                        if (data.date) {{
+                            document.getElementById('lastExecDate').innerText = data.date;
+                        }}
                     }}
                 }} else if (data.status === 'idle') {{
                     banner.className = 'mc-banner info';
                     banner.innerText = `[IDLE] ${{data.message || data.reason || 'No action needed'}}`;
                 }} else {{
+                    const errMsg = data.error || data.results?.errors?.[0]?.error || data.message || JSON.stringify(data);
                     banner.className = 'mc-banner error';
-                    banner.innerText = `[WARNING] ${{data.error || data.message || JSON.stringify(data)}}`;
+                    banner.innerText = `[ERROR] ${{errMsg}}`;
                 }}
             }} catch (err) {{
                 banner.className = 'mc-banner error';

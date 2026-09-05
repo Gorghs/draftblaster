@@ -116,7 +116,29 @@ def evaluate_and_trigger(
     try:
         results = send_all_drafts()
 
-        # Step 5: Record success
+        total = results.get("total_drafts", 0)
+        sent = results.get("sent", 0)
+        failed = results.get("failed", 0)
+        status_res = results.get("status")
+
+        # If sending explicitly failed or all drafts failed to send, do not record success
+        if status_res == "failed" or (total > 0 and sent == 0 and failed > 0):
+            err_msg = "Draft sending failed."
+            if results.get("errors"):
+                err_msg = results["errors"][0].get("error", err_msg)
+            logger.error("Daily draft execution failed: %s", err_msg)
+            return {
+                "status": "error",
+                "action": "failed",
+                "date": today_str,
+                "executed_at": current_time_str,
+                "timezone": TIMEZONE_STR,
+                "forced": force,
+                "error": err_msg,
+                "results": results
+            }
+
+        # Step 5: Record success only when completed successfully
         store.record_success(today_str, results)
 
         return {
