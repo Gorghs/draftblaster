@@ -123,9 +123,13 @@ def main() -> int:
     logger.info("=" * 60)
 
     # Return non-zero exit code on real failure
-    if status == "failed" or failed > 0:
+    if status == "failed" or (failed > 0 and sent == 0):
         logger.error("Job finished with errors. Exiting with code 1.")
         return 1
+
+    if failed > 0:
+        logger.warning("Job finished with partial success. Exiting with code 0.")
+        return 0
 
     logger.info("Job finished successfully. Exiting with code 0.")
     return 0
