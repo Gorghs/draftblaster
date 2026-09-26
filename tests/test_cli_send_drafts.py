@@ -90,3 +90,22 @@ def test_cli_live_send_failure(monkeypatch):
          patch.object(sys, "argv", ["send_drafts.py"]):
         exit_code = main()
         assert exit_code == 1
+
+
+def test_cli_live_partial_success_exits_zero(monkeypatch):
+    """Verify CLI exits with code 0 when at least one draft is sent."""
+    monkeypatch.setenv("EMAIL_GMAIL_USER", "test@gmail.com")
+    monkeypatch.setenv("EMAIL_GMAIL_PASSWORD", "apppassword123")
+
+    partial_result = {
+        "status": "partial_success",
+        "total_drafts": 2,
+        "sent": 1,
+        "failed": 1,
+        "errors": [{"draft_id": "2", "error": "Daily user sending limit exceeded"}],
+    }
+
+    with patch("send_drafts.send_all_drafts", return_value=partial_result), \
+         patch.object(sys, "argv", ["send_drafts.py"]):
+        exit_code = main()
+        assert exit_code == 0
